@@ -20,6 +20,14 @@ Video -> YOLO11 detection + ByteTrack tracking -> rule engine
 
 
 
+\## Dashboard
+
+
+
+!\[Dashboard](docs/dashboard.png)
+
+
+
 \## Results (validation set, 340 images)
 
 
@@ -41,6 +49,12 @@ Video -> YOLO11 detection + ByteTrack tracking -> rule engine
 
 
 YOLO11s fine-tuned for 30 epochs on a Colab T4. Runs at 50+ FPS on an RTX 3050 laptop GPU.
+
+
+
+!\[Training curves](docs/ppe\_v1/results.png)
+
+!\[Confusion matrix](docs/ppe\_v1/confusion\_matrix\_normalized.png)
 
 
 
