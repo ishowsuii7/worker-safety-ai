@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worker Safety AI - Dashboard</title>
+<style>
+:root{--bg:#0f1419;--panel:#171d25;--line:#263040;--text:#e6edf3;--muted:#8b98a9;--crit:#ff4d4f;--warn:#f5a524;--ok:#2ecc71}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,"Segoe UI",Arial,sans-serif}
+header{padding:16px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+h1{font-size:18px;margin:0}
+#live{font-size:13px;color:var(--ok)}
+main{padding:24px;max-width:1200px;margin:0 auto}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card .n{font-size:30px;font-weight:700}
+.card .l{color:var(--muted);font-size:13px}
+.card.crit .n{color:var(--crit)}
+.card.warn .n{color:var(--warn)}
+.toolbar{display:flex;gap:10px;margin-bottom:12px}
+select{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+.wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line)}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);font-size:14px;white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.badge{padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}
+.badge.critical{background:rgba(255,77,79,.15);color:var(--crit)}
+.badge.warning{background:rgba(245,165,36,.15);color:var(--warn)}
+img.thumb{width:96px;height:54px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--line)}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;cursor:pointer}
+#modal img{max-width:90vw;max-height:90vh;border-radius:8px}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Worker Safety AI</h1>
+  <span id="live">&#9679; connecting</span>
+</header>
+<main>
+  <div class="cards">
+    <div class="card"><div class="n" id="c-total">0</div><div class="l">Total alerts</div></div>
+    <div class="card crit"><div class="n" id="c-crit">0</div><div class="l">Critical</div></div>
+    <div class="card warn"><div class="n" id="c-warn">0</div><div class="l">Warnings</div></div>
+    <div class="card"><div class="n" id="c-work">0</div><div class="l">Worker IDs involved</div></div>
+  </div>
+
+  <div class="toolbar">
+    <select id="f-type">
+      <option value="">All types</option>
+      <option value="no_helmet">No helmet</option>
+      <option value="no_vest">No vest</option>
+      <option value="zone_intrusion">Restricted zone</option>
+    </select>
+    <select id="f-sev">
+      <option value="">All severities</option>
+      <option value="critical">Critical</option>
+      <option value="warning">Warning</option>
+    </select>
+  </div>
+
+  <div class="wrap">
+    <table>
+      <thead><tr><th>#</th><th>Video time</th><th>Type</th><th>Severity</th><th>Worker</th><th>Frame</th><th>Evidence</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</main>
+
+<div id="modal" onclick="this.style.display='none'"><img id="modal-img" alt="snapshot"></div>
+
+<script>
+const LABEL = {no_helmet: "No helmet", no_vest: "No vest", zone_intrusion: "Restricted zone"};
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function show(url) {
+  document.getElementById("modal-img").src = url;
+  document.getElementById("modal").style.display = "flex";
+}
+
+function render(events, stats) {
+  document.getElementById("c-total").textContent = stats.total;
+  document.getElementById("c-crit").textContent = stats.critical;
+  document.getElementById("c-warn").textContent = stats.warning;
+  document.getElementById("c-work").textContent = stats.workers_involved;
+
+  const body = document.getElementById("rows");
+  if (!events.length) {
+    body.innerHTML = '<tr><td colspan="7" class="empty">No alerts yet. Run the safety script to generate events.</td></tr>';
+    return;
+  }
+  body.innerHTML = events.map(e => `
+    <tr>
+      <td>${esc(e.id)}</td>
+      <td>${Number(e.video_time).toFixed(1)} s</td>
+      <td>${esc(LABEL[e.type] || e.type)}</td>
+      <td><span class="badge ${esc(e.severity)}">${esc(e.severity)}</span></td>
+      <td>#${esc(e.worker_id)}</td>
+      <td>${esc(e.frame_no)}</td>
+      <td><img class="thumb" src="${esc(e.snapshot_url)}" onclick="show('${esc(e.snapshot_url)}')"></td>
+    </tr>`).join("");
+}
+
+async function load() {
+  const qs = new URLSearchParams({limit: 100});
+  const t = document.getElementById("f-type").value;
+  const s = document.getElementById("f-sev").value;
+  if (t) qs.set("type", t);
+  if (s) qs.set("severity", s);
+  const live = document.getElementById("live");
+  try {
+    const [events, stats] = await Promise.all([
+      fetch("/api/events?" + qs).then(r => r.json()),
+      fetch("/api/stats").then(r => r.json())
+    ]);
+    render(events, stats);
+    live.textContent = "\u25CF live";
+    live.style.color = "var(--ok)";
+  } catch (err) {
+    live.textContent = "\u25CF offline";
+    live.style.color = "var(--crit)";
+  }
+}
+
+document.getElementById("f-type").onchange = load;
+document.getElementById("f-sev").onchange = load;
+load();
+setInterval(load, 3000);
+</script>
+</body>
+</html>
