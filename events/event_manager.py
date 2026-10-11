@@ -9,14 +9,18 @@ SEVERITY = {
     "no_helmet": "warning",
     "no_vest": "warning",
     "zone_intrusion": "critical",
+    "fall": "critical",
+    "person_down": "critical",
 }
 
 # The same problem on the SAME worker inside this window is not logged again.
-REPEAT_S = {"no_helmet": 30.0, "no_vest": 30.0, "zone_intrusion": 5.0}
+REPEAT_S = {"no_helmet": 30.0, "no_vest": 30.0, "zone_intrusion": 5.0,
+            "fall": 30.0, "person_down": 60.0}
 
 # The same problem at the same spot under a NEW worker ID (the tracker lost the
 # person) is ignored inside this window, as long as the old ID is gone from the screen.
-MERGE_S = {"no_helmet": 60.0, "no_vest": 60.0, "zone_intrusion": 10.0}
+MERGE_S = {"no_helmet": 60.0, "no_vest": 60.0, "zone_intrusion": 10.0,
+           "fall": 60.0, "person_down": 60.0}
 
 
 class EventManager:

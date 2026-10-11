@@ -52,6 +52,8 @@ img.thumb{width:96px;height:54px;object-fit:cover;border-radius:6px;cursor:point
       <option value="no_helmet">No helmet</option>
       <option value="no_vest">No vest</option>
       <option value="zone_intrusion">Restricted zone</option>
+      <option value="fall">Fall</option>
+      <option value="person_down">Person down</option>
     </select>
     <select id="f-sev">
       <option value="">All severities</option>
@@ -71,8 +73,7 @@ img.thumb{width:96px;height:54px;object-fit:cover;border-radius:6px;cursor:point
 <div id="modal" onclick="this.style.display='none'"><img id="modal-img" alt="snapshot"></div>
 
 <script>
-const LABEL = {no_helmet: "No helmet", no_vest: "No vest", zone_intrusion: "Restricted zone"};
-
+const LABEL = {no_helmet: "No helmet", no_vest: "No vest", zone_intrusion: "Restricted zone", fall: "Fall", person_down: "Person down"};
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
