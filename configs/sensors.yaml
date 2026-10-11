@@ -1,0 +1,9 @@
+# Thresholds for the wearable sensors.
+# PLACEHOLDERS: calibrate the gas values with your real sensor once it is wired
+# (note the reading in clean air, then the reading near a lighter's gas, and adjust).
+gas:            # raw ESP32 ADC value, 0-4095
+  warning: 1800
+  critical: 2800
+temperature_c:
+  warning: 38
+  critical: 45

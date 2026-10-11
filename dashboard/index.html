@@ -10,7 +10,9 @@
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,"Segoe UI",Arial,sans-serif}
 header{padding:16px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
 h1{font-size:18px;margin:0}
+h2{font-size:14px;margin:26px 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 #live{font-size:13px;color:var(--ok)}
+#alertbar{display:none;background:var(--crit);color:#fff;font-weight:700;padding:10px 24px}
 main{padding:24px;max-width:1200px;margin:0 auto}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
@@ -18,6 +20,17 @@ main{padding:24px;max-width:1200px;margin:0 auto}
 .card .l{color:var(--muted);font-size:13px}
 .card.crit .n{color:var(--crit)}
 .card.warn .n{color:var(--warn)}
+.wearables{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:20px}
+.w.critical{border-color:var(--crit)}
+.w.warning{border-color:var(--warn)}
+.w.offline{opacity:.55}
+.w-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.w-vals{display:flex;gap:28px;margin-bottom:6px}
+.w-vals .n{font-size:26px}
+.w .reasons{min-height:20px;font-size:13px;color:var(--muted)}
+.spark{width:100%;height:40px;margin-top:8px;color:var(--ok)}
+.w.warning .spark{color:var(--warn)}
+.w.critical .spark{color:var(--crit)}
 .toolbar{display:flex;gap:10px;margin-bottom:12px}
 select{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
 .wrap{overflow-x:auto}
@@ -27,6 +40,8 @@ th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;le
 .badge{padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}
 .badge.critical{background:rgba(255,77,79,.15);color:var(--crit)}
 .badge.warning{background:rgba(245,165,36,.15);color:var(--warn)}
+.badge.ok{background:rgba(46,204,113,.15);color:var(--ok)}
+.badge.offline{background:rgba(139,152,169,.18);color:var(--muted)}
 img.thumb{width:96px;height:54px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--line)}
 #modal{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;cursor:pointer}
 #modal img{max-width:90vw;max-height:90vh;border-radius:8px}
@@ -38,12 +53,17 @@ img.thumb{width:96px;height:54px;object-fit:cover;border-radius:6px;cursor:point
   <h1>Worker Safety AI</h1>
   <span id="live">&#9679; connecting</span>
 </header>
+<div id="alertbar"></div>
 <main>
+  <h2>Wearables</h2>
+  <div class="wearables" id="wearables"></div>
+
+  <h2>Camera alerts</h2>
   <div class="cards">
     <div class="card"><div class="n" id="c-total">0</div><div class="l">Total alerts</div></div>
     <div class="card crit"><div class="n" id="c-crit">0</div><div class="l">Critical</div></div>
     <div class="card warn"><div class="n" id="c-warn">0</div><div class="l">Warnings</div></div>
-    <div class="card"><div class="n" id="c-work">0</div><div class="l">Worker IDs involved</div></div>
+    <div class="card"><div class="n" id="c-work">0</div><div class="l">Tracked IDs</div></div>
   </div>
 
   <div class="toolbar">
@@ -74,6 +94,7 @@ img.thumb{width:96px;height:54px;object-fit:cover;border-radius:6px;cursor:point
 
 <script>
 const LABEL = {no_helmet: "No helmet", no_vest: "No vest", zone_intrusion: "Restricted zone", fall: "Fall", person_down: "Person down"};
+
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
@@ -83,7 +104,65 @@ function show(url) {
   document.getElementById("modal").style.display = "flex";
 }
 
-function render(events, stats) {
+/* ---------------------------------------------------------------- wearables */
+function spark(values) {
+  if (values.length < 2) return "";
+  const w = 240, h = 40, max = 4095;
+  const step = w / (values.length - 1);
+  const pts = values.map((v, i) =>
+    (i * step).toFixed(1) + "," + (h - Math.min(v, max) / max * h).toFixed(1)).join(" ");
+  return '<svg class="spark" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' +
+         '<polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+}
+
+function renderWearables(latest, hist) {
+  const box = document.getElementById("wearables");
+  const bar = document.getElementById("alertbar");
+
+  if (!latest.length) {
+    box.innerHTML = '<div class="card empty">No wearable connected yet. ' +
+      'Power on the ESP32, or run: python -m scripts.simulate_esp32</div>';
+    bar.style.display = "none";
+    return;
+  }
+
+  const bad = latest.filter(w => w.online && w.status === "critical");
+  if (bad.length) {
+    bar.textContent = "WEARABLE ALERT: " + bad.map(w =>
+      "Worker #" + w.worker_id + " - " + (w.reasons || "critical")).join("  |  ");
+    bar.style.display = "block";
+  } else {
+    bar.style.display = "none";
+  }
+
+  box.innerHTML = latest.map((w, i) => {
+    const state = w.online ? w.status : "offline";
+    const values = (hist[i] || []).map(r => r.gas).reverse();
+    const note = w.online
+      ? (w.reasons ? esc(w.reasons) : "All readings normal")
+      : "Offline - last seen " + esc(w.age_s) + " s ago";
+    return '<div class="card w ' + esc(state) + '">' +
+      '<div class="w-head"><b>Worker #' + esc(w.worker_id) + '</b>' +
+      '<span class="badge ' + esc(state) + '">' + esc(state) + '</span></div>' +
+      '<div class="w-vals">' +
+        '<div><div class="n">' + esc(Math.round(w.gas)) + '</div><div class="l">Gas (ADC)</div></div>' +
+        '<div><div class="n">' + esc(Number(w.temp_c).toFixed(1)) + '&deg;C</div><div class="l">Temperature</div></div>' +
+      '</div>' +
+      '<div class="reasons">' + note + '</div>' +
+      spark(values) +
+      '</div>';
+  }).join("");
+}
+
+async function loadWearables() {
+  const latest = await fetch("/api/sensors/latest").then(r => r.json());
+  const hist = await Promise.all(latest.map(w =>
+    fetch("/api/sensors/history?worker=" + w.worker_id + "&limit=60").then(r => r.json())));
+  renderWearables(latest, hist);
+}
+
+/* ------------------------------------------------------------ camera alerts */
+function renderEvents(events, stats) {
   document.getElementById("c-total").textContent = stats.total;
   document.getElementById("c-crit").textContent = stats.critical;
   document.getElementById("c-warn").textContent = stats.warning;
@@ -106,24 +185,31 @@ function render(events, stats) {
     </tr>`).join("");
 }
 
-async function load() {
+async function loadEvents() {
   const qs = new URLSearchParams({limit: 100});
   const t = document.getElementById("f-type").value;
   const s = document.getElementById("f-sev").value;
   if (t) qs.set("type", t);
   if (s) qs.set("severity", s);
+  const [events, stats] = await Promise.all([
+    fetch("/api/events?" + qs).then(r => r.json()),
+    fetch("/api/stats").then(r => r.json())
+  ]);
+  renderEvents(events, stats);
+}
+
+/* ------------------------------------------------------------------- loop */
+async function load() {
   const live = document.getElementById("live");
-  try {
-    const [events, stats] = await Promise.all([
-      fetch("/api/events?" + qs).then(r => r.json()),
-      fetch("/api/stats").then(r => r.json())
-    ]);
-    render(events, stats);
-    live.textContent = "\u25CF live";
-    live.style.color = "var(--ok)";
-  } catch (err) {
+  let failed = 0;
+  try { await loadEvents(); } catch (err) { failed++; }
+  try { await loadWearables(); } catch (err) { failed++; }
+  if (failed === 2) {
     live.textContent = "\u25CF offline";
     live.style.color = "var(--crit)";
+  } else {
+    live.textContent = "\u25CF live";
+    live.style.color = "var(--ok)";
   }
 }
 
