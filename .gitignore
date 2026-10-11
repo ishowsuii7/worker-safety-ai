@@ -7,3 +7,4 @@ videos/
 models/*.pt
 *.mp4
 *.pt
+*.lnk
